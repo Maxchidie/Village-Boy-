@@ -1,0 +1,7 @@
+{
+  "name": "Village Boy",
+  "description": "A non-partisan mobile-first civic PWA for Nigerian citizens to express candidate preferences and view aggregated community pulses.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
