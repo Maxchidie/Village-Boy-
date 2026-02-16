@@ -13,6 +13,7 @@ export interface User {
   ward?: string;
   privacyDefault: boolean;
   onboarded: boolean;
+  standardsAccepted: boolean;
 }
 
 export interface Office {

@@ -7,19 +7,31 @@ const Pulse: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [offices, setOffices] = useState<Office[]>([]);
   const [pulseData, setPulseData] = useState<Record<string, PulseResponse | null>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const u = api.initSession();
-    const offs = api.getOffices();
-    setUser(u);
-    setOffices(offs);
+    const load = async () => {
+      const u = await api.initSession();
+      const offs = await api.getOffices();
+      setUser(u);
+      setOffices(offs);
 
-    const initialPulse: Record<string, PulseResponse | null> = {};
-    offs.forEach(o => {
-      initialPulse[o.id] = api.getPulse(o.id, u.state);
-    });
-    setPulseData(initialPulse);
+      if (u.state) {
+        const data = await api.getPulse(u.state);
+        setPulseData(data);
+      }
+      setLoading(false);
+    };
+    load();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -30,17 +42,19 @@ const Pulse: React.FC = () => {
 
       <div className="space-y-6">
         {offices.map(o => {
-          const data = pulseData[o.id];
+          const data = pulseData[o.id] as any;
+          const isAllowed = data?.allowed;
+
           return (
             <div key={o.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-4 transition-colors">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{o.name}</h3>
-                {data && <span className="text-[10px] font-bold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded-full">{data.totalVotes} Samples</span>}
+                {isAllowed && <span className="text-[10px] font-bold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-1 rounded-full">{data.totalVotes} Samples</span>}
               </div>
 
-              {data ? (
+              {isAllowed ? (
                 <div className="space-y-4">
-                  {data.data.map((record, idx) => {
+                  {data.data.map((record: any, idx: number) => {
                     const percentage = Math.round((record.count / data.totalVotes) * 100);
                     return (
                       <div key={record.candidateId} className="space-y-1.5">
@@ -64,7 +78,7 @@ const Pulse: React.FC = () => {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
                   <p className="text-sm font-bold text-slate-500 dark:text-slate-500">Not Enough Data</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-600 max-w-[200px]">More citizens in {user?.state} need to assign their {o.name} preference before results show.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-600 max-w-[200px]">We need {25 - (data?.totalVotes || 0)} more responses for {o.name} in {user?.state} to show insights.</p>
                 </div>
               )}
             </div>
