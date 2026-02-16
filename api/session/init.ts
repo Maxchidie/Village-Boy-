@@ -16,6 +16,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!sessionId || !user) {
     sessionId = uuidv4();
+    user = await prisma.user.create({
+      data: { sessionId }
+    });
     res.setHeader('Set-Cookie', serialize('vb_session', sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -25,5 +28,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }));
   }
 
-  return res.status(200).json({ ok: true, sessionId });
+  return res.status(200).json({ 
+    ok: true, 
+    sessionId,
+    user: {
+      id: user.id,
+      state: user.state,
+      lga: user.lga,
+      ward: user.ward,
+      standardsAccepted: user.standardsAccepted,
+      onboarded: !!(user.state && user.lga)
+    }
+  });
 }
