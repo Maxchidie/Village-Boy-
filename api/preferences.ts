@@ -1,4 +1,3 @@
-
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { parse } from 'cookie';
 import { prisma } from './_lib/prisma';
@@ -45,8 +44,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    return res.status(200).json(pref);
+    // Return object compatible with the frontend Preference type
+    return res.status(200).json({
+      ...pref,
+      reasons: JSON.parse(pref.reasonsJson || '[]')
+    });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: 'Failed to save preference' });
   }
 }

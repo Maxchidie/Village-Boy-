@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Landing from './components/Landing';
@@ -11,18 +10,61 @@ import { api } from './services/api';
 import { User } from './types';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const local = localStorage.getItem('v_boy_user');
+    return local ? JSON.parse(local) : null;
+  });
+  const [isReady, setIsReady] = useState(false);
 
-  useEffect(() => {
-    // Handle the promise returned by api.initSession instead of passing the promise directly to setUser
-    api.initSession().then(setUser);
+  const boot = useCallback(async () => {
+    try {
+      // Race condition protection: ensure the splash screen clears within 2.5s
+      const u = await Promise.race([
+        api.initSession(),
+        new Promise<User>((_, reject) => 
+          setTimeout(() => reject(new Error("init timeout")), 2500)
+        ),
+      ]);
+      setUser(u);
+    } catch (err) {
+      console.warn("Boot continuing with local/fallback session identity:", err);
+      const local = localStorage.getItem('v_boy_user');
+      if (local) setUser(JSON.parse(local));
+      else {
+        setUser({ id: 'local-fallback', onboarded: false, standardsAccepted: false });
+      }
+    } finally {
+      setIsReady(true);
+    }
   }, []);
 
-  // Use async/await to resolve the promise from api.initSession before updating state
-  const refreshUser = async () => {
-    const u = await api.initSession();
-    setUser(u);
-  };
+  useEffect(() => {
+    boot();
+
+    const handleUpdate = () => {
+      const local = localStorage.getItem('v_boy_user');
+      if (local) setUser(JSON.parse(local));
+    };
+    window.addEventListener('vb-user-updated', handleUpdate);
+    
+    return () => {
+      window.removeEventListener('vb-user-updated', handleUpdate);
+    };
+  }, [boot]);
+
+  if (!isReady) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl animate-bounce mb-4 shadow-lg shadow-green-200 dark:shadow-green-900/20">V</div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+          <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+          <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce"></div>
+        </div>
+        <p className="mt-4 text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">Village Boy Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <HashRouter>
@@ -36,7 +78,7 @@ const App: React.FC = () => {
           />
           <Route 
             path="/ballot" 
-            element={user?.onboarded ? <Ballot /> : <Navigate to={user?.standardsAccepted ? "/onboarding" : "/standards"} />} 
+            element={user?.onboarded ? <Ballot /> : <Navigate to={user?.standardsAccepted ? (user?.onboarded ? "/ballot" : "/onboarding") : "/standards"} />} 
           />
           <Route 
             path="/pulse" 

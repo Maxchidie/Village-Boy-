@@ -1,87 +1,153 @@
-
 import { User, Preference, PulseResponse, Office, Candidate } from '../types';
 
 const OUTBOX_KEY = 'VB_OUTBOX';
+const PREFS_KEY = 'v_boy_prefs';
+const USER_KEY = 'v_boy_user';
+const USER_UPDATED_EVENT = 'vb-user-updated';
+
+const notifyUpdate = () => {
+  window.dispatchEvent(new CustomEvent(USER_UPDATED_EVENT));
+};
+
+const fetchWithTimeout = async (url: string, options: any = {}, timeout = 3000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { 
+      ...options, 
+      signal: controller.signal,
+      credentials: 'include' 
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+};
 
 export const api = {
   initSession: async (): Promise<User> => {
-    const res = await fetch('/api/session/init', { method: 'POST' });
-    const data = await res.json();
-    
-    // Maintain local state for navigation guards
-    const localUser = JSON.parse(localStorage.getItem('v_boy_user') || '{}');
-    if (!localUser.id) {
-      localUser.id = data.sessionId;
-      localStorage.setItem('v_boy_user', JSON.stringify(localUser));
+    try {
+      const res = await fetchWithTimeout('/api/session/init', { method: 'POST' }, 2500);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json();
+      
+      const user = data.user;
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      
+      api.flushOutbox();
+      return user;
+    } catch (e) {
+      console.warn("Session Init Failed, using fallback:", e);
+      const local = localStorage.getItem(USER_KEY);
+      if (local) return JSON.parse(local);
+      
+      const fallback: User = {
+        id: 'offline-' + Math.random().toString(36).substr(2, 9),
+        onboarded: false,
+        standardsAccepted: false
+      };
+      localStorage.setItem(USER_KEY, JSON.stringify(fallback));
+      return fallback;
     }
-    
-    // Attempt outbox flush
-    api.flushOutbox();
-    
-    return localUser;
   },
 
   acceptStandards: async (): Promise<User> => {
-    const localUser = JSON.parse(localStorage.getItem('v_boy_user') || '{}');
-    localUser.standardsAccepted = true;
-    localStorage.setItem('v_boy_user', JSON.stringify(localUser));
-    
-    await fetch('/api/user/standards', { 
-      method: 'POST', 
-      body: JSON.stringify({ accepted: true }),
-      headers: { 'Content-Type': 'application/json' }
-    }).catch(() => {}); // Silent fail, we have local state
-
-    return localUser;
+    try {
+      const res = await fetchWithTimeout('/api/user/standards', { 
+        method: 'POST', 
+        body: JSON.stringify({ accepted: true }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const updatedUser = await res.json();
+      const user = { ...updatedUser, onboarded: !!(updatedUser.state && updatedUser.lga) };
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      notifyUpdate();
+      return user;
+    } catch (e) {
+      const local = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
+      const updated = { ...local, standardsAccepted: true };
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+      notifyUpdate();
+      return updated as User;
+    }
   },
 
   updateLocation: async (updates: Partial<User>): Promise<User> => {
-    const current = JSON.parse(localStorage.getItem('v_boy_user') || '{}');
-    const updated = { ...current, ...updates, onboarded: true };
-    localStorage.setItem('v_boy_user', JSON.stringify(updated));
-
-    await fetch('/api/user/location', {
-      method: 'POST',
-      body: JSON.stringify(updates),
-      headers: { 'Content-Type': 'application/json' }
-    }).catch(() => {});
-
-    return updated;
+    try {
+      const res = await fetchWithTimeout('/api/user/location', {
+        method: 'POST',
+        body: JSON.stringify(updates),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const updatedUser = await res.json();
+      const user = { ...updatedUser, onboarded: !!(updatedUser.state && updatedUser.lga) };
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      notifyUpdate();
+      return user;
+    } catch (e) {
+      const local = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
+      const updated = { ...local, ...updates };
+      updated.onboarded = !!(updated.state && updated.lga);
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+      notifyUpdate();
+      return updated as User;
+    }
   },
 
   getOffices: async (): Promise<Office[]> => {
-    const res = await fetch('/api/offices');
-    return res.json();
+    try {
+      const res = await fetchWithTimeout('/api/offices');
+      if (!res.ok) throw new Error('Failed to fetch offices');
+      const data = await res.json();
+      localStorage.setItem('v_boy_offices', JSON.stringify(data));
+      return data;
+    } catch (e) {
+      return JSON.parse(localStorage.getItem('v_boy_offices') || '[]');
+    }
   },
 
   getCandidateById: async (id: string): Promise<Candidate | undefined> => {
-    const res = await fetch(`/api/candidates/${id}`);
-    if (!res.ok) return undefined;
-    return res.json();
+    try {
+      const res = await fetchWithTimeout(`/api/candidates/${id}`);
+      if (!res.ok) return undefined;
+      return res.json();
+    } catch (e) {
+      return undefined;
+    }
   },
 
   getCandidates: async (officeId: string, state: string, lga: string): Promise<Candidate[]> => {
-    const params = new URLSearchParams({ officeId, state, lga });
-    const res = await fetch(`/api/candidates?${params.toString()}`);
-    return res.json();
+    try {
+      const params = new URLSearchParams({ officeId, state: state || '', lga: lga || '' });
+      const res = await fetchWithTimeout(`/api/candidates?${params.toString()}`);
+      if (!res.ok) return [];
+      return res.json();
+    } catch (e) {
+      return [];
+    }
   },
 
   savePreference: async (pref: Omit<Preference, 'id' | 'createdAt'>): Promise<void> => {
-    // 1. Save locally for immediate UI feedback
-    const stored = JSON.parse(localStorage.getItem('v_boy_prefs') || '[]');
+    const stored = JSON.parse(localStorage.getItem(PREFS_KEY) || '[]');
     const filtered = stored.filter((p: any) => p.officeId !== pref.officeId);
-    localStorage.setItem('v_boy_prefs', JSON.stringify([...filtered, pref]));
+    const newPref = { ...pref, id: `local-${Date.now()}`, createdAt: Date.now() };
+    localStorage.setItem(PREFS_KEY, JSON.stringify([...filtered, newPref]));
 
-    // 2. Try network
     try {
-      const res = await fetch('/api/preferences', {
+      const res = await fetchWithTimeout('/api/preferences', {
         method: 'POST',
         body: JSON.stringify(pref),
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error('API Error');
+      const saved = await res.json();
+      
+      const current = JSON.parse(localStorage.getItem(PREFS_KEY) || '[]');
+      const updated = current.map((p: any) => p.officeId === pref.officeId ? saved : p);
+      localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
     } catch (e) {
-      // 3. Queue for later
       const outbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
       outbox.push(pref);
       localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
@@ -89,12 +155,17 @@ export const api = {
   },
 
   getPreferences: (): Preference[] => {
-    return JSON.parse(localStorage.getItem('v_boy_prefs') || '[]');
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || '[]');
   },
 
   getPulse: async (state: string): Promise<Record<string, PulseResponse | null>> => {
-    const res = await fetch(`/api/pulse?state=${state}`);
-    return res.json();
+    try {
+      const res = await fetchWithTimeout(`/api/pulse?state=${state}`);
+      if (!res.ok) return {};
+      return res.json();
+    } catch (e) {
+      return {};
+    }
   },
 
   flushOutbox: async () => {
@@ -104,7 +175,7 @@ export const api = {
     const remaining = [];
     for (const item of outbox) {
       try {
-        await fetch('/api/preferences', {
+        await fetchWithTimeout('/api/preferences', {
           method: 'POST',
           body: JSON.stringify(item),
           headers: { 'Content-Type': 'application/json' }
@@ -117,5 +188,4 @@ export const api = {
   }
 };
 
-// Listen for online events to flush outbox
 window.addEventListener('online', api.flushOutbox);

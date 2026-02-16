@@ -8,10 +8,10 @@ export enum Scope {
 
 export interface User {
   id: string;
-  state: string;
-  lga: string;
+  state?: string;
+  lga?: string;
   ward?: string;
-  privacyDefault: boolean;
+  privacyDefault?: boolean;
   onboarded: boolean;
   standardsAccepted: boolean;
 }
