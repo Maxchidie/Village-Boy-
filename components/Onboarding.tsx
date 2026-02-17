@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { NIGERIAN_STATES, LGAS_BY_STATE } from '../constants';
@@ -9,13 +10,26 @@ const Onboarding: React.FC = () => {
   const [lga, setLga] = useState('');
   const [privacy, setPrivacy] = useState(true);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleNext = () => {
-    if (step < 3) setStep(step + 1);
-    else {
-      api.updateLocation({ state, lga, privacyDefault: privacy });
-      navigate('/ballot');
+  const handleNext = async () => {
+    if (step < 3) {
+      setStep(step + 1);
+    } else {
+      setIsSubmitting(true);
+      try {
+        // Fix: Await the API call so the state update (via notifyUpdate) 
+        // completes before the navigation guard in App.tsx checks it.
+        await api.updateLocation({ state, lga, privacyDefault: privacy });
+        navigate('/ballot');
+      } catch (err) {
+        console.error("Failed to save location:", err);
+        // Fallback: navigate anyway since api handles local storage fallback
+        navigate('/ballot');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -23,12 +37,10 @@ const Onboarding: React.FC = () => {
     setIsDetecting(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        // Simplified mapping for demo - in a real app use a reverse geocoding API
-        // For now, we'll just simulate a successful detection in Lagos
         setTimeout(() => {
           setState('Lagos');
           setIsDetecting(false);
-          if (step === 1) handleNext();
+          if (step === 1) setStep(2);
         }, 1200);
       },
       (err) => {
@@ -76,7 +88,7 @@ const Onboarding: React.FC = () => {
             {NIGERIAN_STATES.map((s) => (
               <button
                 key={s}
-                onClick={() => { setState(s); handleNext(); }}
+                onClick={() => { setState(s); setStep(2); }}
                 className={`text-left p-4 rounded-2xl border-2 transition-all active:scale-[0.97] ${state === s ? 'border-green-600 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 font-bold' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'}`}
               >
                 {s}
@@ -103,7 +115,7 @@ const Onboarding: React.FC = () => {
               {lgas.map((l) => (
                 <button
                   key={l}
-                  onClick={() => { setLga(l); handleNext(); }}
+                  onClick={() => { setLga(l); setStep(3); }}
                   className={`text-left p-5 rounded-[1.5rem] border-2 transition-all active:scale-[0.98] flex justify-between items-center ${lga === l ? 'border-green-600 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 font-bold' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'}`}
                 >
                   {l}
@@ -117,7 +129,7 @@ const Onboarding: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
               </div>
               <p className="text-slate-500 dark:text-slate-400 font-medium">We're still adding LGAs for {state}. You can skip for now.</p>
-              <button onClick={handleNext} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-2xl font-bold">Skip for Now</button>
+              <button onClick={() => setStep(3)} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-2xl font-bold">Skip for Now</button>
             </div>
           )}
         </div>
@@ -155,9 +167,15 @@ const Onboarding: React.FC = () => {
 
           <button 
             onClick={handleNext}
-            className="w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black text-xl shadow-lg shadow-green-200 dark:shadow-green-900/20 active:scale-95 transition-all"
+            disabled={isSubmitting}
+            className={`w-full bg-green-600 text-white py-5 rounded-[1.5rem] font-black text-xl shadow-lg shadow-green-200 dark:shadow-green-900/20 active:scale-95 transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-80' : ''}`}
           >
-            Enter Village
+            {isSubmitting ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Entering...
+              </>
+            ) : 'Enter Village'}
           </button>
         </div>
       )}
