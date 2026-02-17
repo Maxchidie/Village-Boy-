@@ -1,13 +1,24 @@
-
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isDark, setIsDark] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
     const isDarkMode = document.documentElement.classList.contains('dark');
     setIsDark(isDarkMode);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -24,11 +35,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      {!isOnline && (
+        <div className="bg-amber-500 text-white text-[10px] font-bold text-center py-1 safe-top z-[60]">
+          OFFLINE MODE • DATA WILL SYNC LATER
+        </div>
+      )}
+      
+      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 safe-top">
         <div className="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold">V</div>
-            <span className="font-bold text-slate-800 dark:text-slate-100 tracking-tight">Village Boy</span>
+            <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">V</div>
+            <span className="font-black text-slate-800 dark:text-slate-100 tracking-tight">Village Boy</span>
           </NavLink>
           <div className="flex gap-2 items-center">
             <button 
@@ -46,8 +63,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 </svg>
               )}
             </button>
-            <NavLink to="/pulse" className={({isActive}) => `text-sm font-medium ${isActive ? 'text-green-600' : 'text-slate-600 dark:text-slate-400'}`}>Pulse</NavLink>
-            <NavLink to="/ballot" className={({isActive}) => `px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${isActive ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>My Ballot</NavLink>
+            <NavLink to="/pulse" className={({isActive}) => `text-sm font-bold ${isActive ? 'text-green-600' : 'text-slate-600 dark:text-slate-400'}`}>Pulse</NavLink>
+            <NavLink to="/ballot" className={({isActive}) => `px-4 py-2 rounded-2xl text-sm font-bold transition-all ${isActive ? 'bg-green-600 text-white shadow-lg shadow-green-200 dark:shadow-none' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>My Ballot</NavLink>
           </div>
         </div>
       </nav>
@@ -56,10 +73,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {children}
       </main>
 
-      <footer className="py-8 bg-slate-100 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
+      <footer className="py-12 bg-slate-100 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 safe-bottom">
         <div className="max-w-md mx-auto px-4 text-center">
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Non-partisan • Independent • Privacy First</p>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Village Boy is not affiliated with any political party, candidate, or INEC. All preferences are private.</p>
+          <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 mx-auto mb-4">VB</div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600 mb-2">The Village Voice</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-[240px] mx-auto">Non-partisan • Independent • Built for Nigeria</p>
+          <div className="mt-8 flex justify-center gap-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <a href="#" className="hover:text-green-600">Privacy</a>
+            <a href="#" className="hover:text-green-600">Terms</a>
+            <a href="#" className="hover:text-green-600">Support</a>
+          </div>
         </div>
       </footer>
     </div>

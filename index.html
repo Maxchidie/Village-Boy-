@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Village Boy - Nigeria's Civic Pulse</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -12,6 +12,9 @@
         extend: {
           colors: {
             slate: { 950: '#0b1220' }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
           }
         }
       }
@@ -28,7 +31,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Village Boy">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     body {
       font-family: 'Inter', sans-serif;
       -webkit-tap-highlight-color: transparent;
@@ -36,6 +39,9 @@
     }
     .safe-bottom {
       padding-bottom: env(safe-area-inset-bottom);
+    }
+    .safe-top {
+      padding-top: env(safe-area-inset-top);
     }
   </style>
 <script type="importmap">
@@ -47,10 +53,10 @@
     "react-dom": "https://esm.sh/react-dom@^19.2.4",
     "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
     "zod": "https://esm.sh/zod@^3.23.8",
-    "@prisma/client": "https://esm.sh/@prisma/client@^7.4.0",
-    "@vercel/node": "https://esm.sh/@vercel/node@^5.6.3",
     "uuid": "https://esm.sh/uuid@^13.0.0",
-    "cookie": "https://esm.sh/cookie@^1.1.1"
+    "cookie": "https://esm.sh/cookie@^1.1.1",
+    "@prisma/client": "https://esm.sh/@prisma/client@^7.4.0",
+    "@vercel/node": "https://esm.sh/@vercel/node@^5.6.3"
   }
 }
 </script>

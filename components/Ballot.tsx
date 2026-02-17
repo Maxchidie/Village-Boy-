@@ -18,20 +18,23 @@ const Ballot: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      const u = await api.initSession();
-      const offs = await api.getOffices();
-      const prefs = api.getPreferences();
-      setUser(u);
-      setOffices(offs);
-      setPreferences(prefs);
-      
-      const resolved: Record<string, Candidate> = {};
-      for (const p of prefs) {
-        const cand = await api.getCandidateById(p.candidateId);
-        if (cand) resolved[p.candidateId] = cand;
+      try {
+        const u = await api.initSession();
+        const offs = await api.getOffices();
+        const prefs = api.getPreferences();
+        setUser(u);
+        setOffices(offs);
+        setPreferences(prefs);
+        
+        const resolved: Record<string, Candidate> = {};
+        for (const p of prefs) {
+          const cand = await api.getCandidateById(p.candidateId);
+          if (cand) resolved[p.candidateId] = cand;
+        }
+        setResolvedCandidates(resolved);
+      } finally {
+        setLoading(false);
       }
-      setResolvedCandidates(resolved);
-      setLoading(false);
     };
     load();
   }, []);
@@ -40,7 +43,8 @@ const Ballot: React.FC = () => {
     if (!user) return;
     setSelectingOffice(office);
     setSelectedCandidate(null);
-    const cands = await api.getCandidates(office.id, user.state, user.lga);
+    setCandidates([]); // Clear previous to show loading
+    const cands = await api.getCandidates(office.id, user.state || '', user.lga || '');
     setCandidates(cands);
     setSearchTerm('');
     setSelectedReasons([]);
@@ -66,7 +70,6 @@ const Ballot: React.FC = () => {
     await api.savePreference(prefData);
     setPreferences(api.getPreferences());
     
-    // Close all
     setSelectingOffice(null);
     setSelectedCandidate(null);
   };
@@ -94,8 +97,8 @@ const Ballot: React.FC = () => {
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-32 space-y-4">
-      <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-green-600"></div>
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading Ballot...</p>
+      <div className="w-10 h-10 border-4 border-slate-200 border-t-green-600 rounded-full animate-spin"></div>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Synchronizing Ballot...</p>
     </div>
   );
 
@@ -104,16 +107,22 @@ const Ballot: React.FC = () => {
     c.party.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const completionPercent = offices.length > 0 
+    ? Math.round((preferences.length / offices.length) * 100) 
+    : 0;
+
   return (
     <div className="space-y-6 pb-24 animate-in fade-in duration-500 max-w-md mx-auto">
-      <header className="bg-green-600 text-white p-8 rounded-[2.5rem] shadow-xl shadow-green-100 dark:shadow-green-900/10 space-y-4 overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+      <header className="bg-green-600 text-white p-8 rounded-[2.5rem] shadow-xl shadow-green-100 dark:shadow-none space-y-6 overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/5 rounded-full -ml-12 -mb-12 blur-2xl"></div>
+        
         <div className="flex justify-between items-start relative z-10">
           <div className="space-y-1">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Local Jurisdiction</h2>
+            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Your Village</h2>
             <p className="text-2xl font-black leading-tight tracking-tight">
-              {user?.state || 'N/A'}, <br/>
-              <span className="opacity-70 text-lg">{user?.lga || 'N/A'}</span>
+              {user?.state || 'Nigeria'}, <br/>
+              <span className="opacity-70 text-lg">{user?.lga || 'Anywhere'}</span>
             </p>
           </div>
           <button 
@@ -125,44 +134,61 @@ const Ballot: React.FC = () => {
             </svg>
           </button>
         </div>
+
+        <div className="relative z-10 pt-2">
+          <div className="flex justify-between items-end mb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Ballot Progress</span>
+            <span className="text-sm font-black">{completionPercent}%</span>
+          </div>
+          <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-white rounded-full transition-all duration-1000 ease-out" 
+              style={{ width: `${completionPercent}%` }}
+            />
+          </div>
+        </div>
         
         {copySuccess && (
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-            <span className="bg-white/95 text-green-700 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg animate-bounce">
-              Ballot Copied!
+          <div className="absolute top-4 left-0 right-0 flex justify-center z-20">
+            <span className="bg-white text-green-700 px-4 py-2 rounded-full text-xs font-bold shadow-xl animate-bounce">
+              Copied to Clipboard!
             </span>
           </div>
         )}
       </header>
+
+      <div className="flex items-center gap-2 px-2">
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse-slow"></div>
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">End-to-End Privacy Enabled</span>
+      </div>
 
       <div className="grid grid-cols-1 gap-4">
         {offices.map((office) => {
           const pref = preferences.find(p => p.officeId === office.id);
           const chosen = pref ? resolvedCandidates[pref.candidateId] : null;
           return (
-            <div key={office.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-4 transition-all hover:shadow-md">
-              <div className="space-y-1">
-                <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{office.name}</h4>
-                <p className={`text-lg font-black tracking-tight ${chosen ? 'text-slate-900 dark:text-slate-100' : 'text-slate-300 dark:text-slate-700'}`}>
+            <div key={office.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-4 transition-all hover:border-green-600/20 active:bg-slate-50 dark:active:bg-slate-800/50" onClick={() => openSelection(office)}>
+              <div className="space-y-1 overflow-hidden">
+                <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest truncate">{office.name}</h4>
+                <p className={`text-lg font-black tracking-tight truncate ${chosen ? 'text-slate-900 dark:text-slate-100' : 'text-slate-300 dark:text-slate-700'}`}>
                   {chosen ? chosen.name : 'Unassigned'}
                 </p>
                 {chosen && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-md">{chosen.party}</span>
+                    <span className="text-[10px] font-black text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-md uppercase">{chosen.party}</span>
                     {pref?.reasons && pref.reasons.length > 0 && (
-                      <span className="text-[10px] text-slate-400 font-medium">+{pref.reasons.length} Reasons</span>
+                      <span className="text-[10px] text-slate-400 font-bold">+{pref.reasons.length} Reasons</span>
                     )}
                   </div>
                 )}
               </div>
               <button 
-                onClick={() => openSelection(office)} 
-                className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center transition-all active:scale-90 ${chosen ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : 'bg-green-600 text-white shadow-lg shadow-green-100 dark:shadow-green-900/10'}`}
+                className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${chosen ? 'bg-slate-50 dark:bg-slate-800 text-slate-400' : 'bg-green-600 text-white shadow-lg shadow-green-100 dark:shadow-none'}`}
               >
                 {chosen ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 )}
               </button>
             </div>
@@ -171,18 +197,18 @@ const Ballot: React.FC = () => {
       </div>
 
       {selectingOffice && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex flex-col justify-end">
-          <div className="bg-white dark:bg-slate-900 rounded-t-[3rem] p-6 max-h-[92vh] overflow-y-auto space-y-6 animate-in slide-in-from-bottom-full duration-300">
-            <div className="flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 py-4 z-10">
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-                  {selectedCandidate ? 'Why this choice?' : `Choose ${selectingOffice.name}`}
+        <div className="fixed inset-0 z-[60] bg-slate-900/40 dark:bg-black/80 backdrop-blur-md flex flex-col justify-end">
+          <div className="bg-white dark:bg-slate-900 rounded-t-[3rem] p-6 max-h-[92vh] overflow-y-auto space-y-6 animate-in slide-in-from-bottom-full duration-300 shadow-2xl">
+            <div className="flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 py-4 z-10 border-b border-slate-50 dark:border-slate-800">
+              <div className="overflow-hidden">
+                <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                  {selectedCandidate ? 'Tell us why?' : `${selectingOffice.name}`}
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">{selectedCandidate ? `Refine your support for ${selectedCandidate.name}` : `Select your preferred candidate for this role.`}</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{selectedCandidate ? `Supporting ${selectedCandidate.name}` : `Select your preferred candidate`}</p>
               </div>
               <button 
                 onClick={() => { setSelectingOffice(null); setSelectedCandidate(null); }} 
-                className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-2xl active:scale-90"
+                className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl active:scale-90"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -197,31 +223,39 @@ const Ballot: React.FC = () => {
                   <input 
                     type="text" 
                     placeholder="Search candidate or party..." 
-                    className="w-full pl-12 pr-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-green-600 transition-all" 
+                    className="w-full pl-12 pr-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-green-600 transition-all font-medium" 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
                   />
                 </div>
 
                 <div className="space-y-3">
-                  {filteredCandidates.length > 0 ? filteredCandidates.map((c) => (
+                  {candidates.length === 0 ? (
+                    <div className="py-20 flex flex-col items-center gap-4">
+                       <div className="w-8 h-8 border-2 border-slate-200 border-t-green-600 rounded-full animate-spin"></div>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Searching Candidates...</p>
+                    </div>
+                  ) : filteredCandidates.length > 0 ? filteredCandidates.map((c) => (
                     <button 
                       key={c.id} 
                       onClick={() => setSelectedCandidate(c)}
-                      className="w-full p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 hover:border-green-600/30 transition-all active:scale-[0.98]"
+                      className="w-full p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 hover:border-green-600/30 transition-all active:scale-[0.98] active:bg-slate-50"
                     >
-                      <div className="text-left">
-                        <p className="font-black text-slate-900 dark:text-slate-100 tracking-tight">{c.name}</p>
-                        <p className="text-xs font-bold text-green-600 uppercase tracking-widest">{c.party}</p>
+                      <div className="text-left overflow-hidden">
+                        <p className="font-black text-slate-900 dark:text-slate-100 tracking-tight truncate">{c.name}</p>
+                        <p className="text-[10px] font-black text-green-600 uppercase tracking-widest">{c.party}</p>
                       </div>
                       <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                       </div>
                     </button>
                   )) : (
-                    <div className="text-center py-12 space-y-2">
-                      <p className="text-slate-400 font-medium">No candidates found.</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-widest">Try adjusting your search</p>
+                    <div className="text-center py-16 space-y-2">
+                      <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      </div>
+                      <p className="text-slate-400 font-bold">No matches found</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest">Check the spelling or try another party</p>
                     </div>
                   )}
                 </div>
@@ -232,20 +266,20 @@ const Ballot: React.FC = () => {
                   <div className="w-14 h-14 bg-green-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-green-200/50">
                     {selectedCandidate.name.charAt(0)}
                   </div>
-                  <div>
-                    <p className="font-black text-slate-900 dark:text-slate-100 text-lg tracking-tight">{selectedCandidate.name}</p>
-                    <p className="text-xs font-black text-green-600 tracking-[0.2em] uppercase">{selectedCandidate.party}</p>
+                  <div className="overflow-hidden">
+                    <p className="font-black text-slate-900 dark:text-slate-100 text-lg tracking-tight truncate">{selectedCandidate.name}</p>
+                    <p className="text-[10px] font-black text-green-600 tracking-[0.2em] uppercase truncate">{selectedCandidate.party}</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">Primary Reasons for Support</h4>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Key Reasons for Support</h4>
                   <div className="flex flex-wrap gap-2">
                     {ISSUE_TAGS.map(tag => (
                       <button
                         key={tag}
                         onClick={() => toggleReason(tag)}
-                        className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all border-2 ${selectedReasons.includes(tag) ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-200 dark:shadow-none' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400'}`}
+                        className={`px-5 py-3 rounded-2xl text-xs font-black transition-all border-2 uppercase tracking-wider ${selectedReasons.includes(tag) ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-200' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400'}`}
                       >
                         {tag}
                       </button>
@@ -256,15 +290,15 @@ const Ballot: React.FC = () => {
                 <div className="pt-6 space-y-3">
                   <button 
                     onClick={confirmChoice}
-                    className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-5 rounded-[1.5rem] font-black text-lg active:scale-95 transition-all"
+                    className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-5 rounded-2xl font-black text-lg active:scale-95 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
                   >
                     Confirm Choice
                   </button>
                   <button 
                     onClick={() => setSelectedCandidate(null)}
-                    className="w-full text-slate-400 font-bold text-sm py-2"
+                    className="w-full text-slate-400 font-black uppercase tracking-widest text-[10px] py-4"
                   >
-                    Change Candidate
+                    Go Back
                   </button>
                 </div>
               </div>

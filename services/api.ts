@@ -9,48 +9,57 @@ const notifyUpdate = () => {
   window.dispatchEvent(new CustomEvent(USER_UPDATED_EVENT));
 };
 
-const fetchWithTimeout = async (url: string, options: any = {}, timeout = 3000) => {
+async function fetchWithTimeout(input: RequestInfo, init?: RequestInit, ms = 3000) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+  const id = setTimeout(() => controller.abort(), ms);
   try {
-    const response = await fetch(url, { 
-      ...options, 
-      signal: controller.signal,
-      credentials: 'include' 
-    });
+    return await fetch(input, { ...init, signal: controller.signal, credentials: "include" });
+  } finally {
     clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
   }
-};
+}
+
+// Singleton to cache the initialization promise
+let initPromise: Promise<User> | null = null;
 
 export const api = {
-  initSession: async (): Promise<User> => {
-    try {
-      const res = await fetchWithTimeout('/api/session/init', { method: 'POST' }, 2500);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      
-      const user = data.user;
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-      
-      api.flushOutbox();
-      return user;
-    } catch (e) {
-      console.warn("Session Init Failed, using fallback:", e);
-      const local = localStorage.getItem(USER_KEY);
-      if (local) return JSON.parse(local);
-      
-      const fallback: User = {
-        id: 'offline-' + Math.random().toString(36).substr(2, 9),
-        onboarded: false,
-        standardsAccepted: false
-      };
-      localStorage.setItem(USER_KEY, JSON.stringify(fallback));
-      return fallback;
-    }
+  initSession: async (force = false): Promise<User> => {
+    if (initPromise && !force) return initPromise;
+
+    initPromise = (async () => {
+      try {
+        const res = await fetchWithTimeout("/api/session/init", { method: "POST" }, 2500);
+        if (!res.ok) throw new Error(`initSession failed: ${res.status}`);
+        const data = await res.json();
+        
+        if (data.user) {
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+          notifyUpdate();
+          return data.user;
+        }
+        
+        const local = localStorage.getItem(USER_KEY);
+        return local ? JSON.parse(local) : data.user;
+      } catch (e) {
+        console.warn("initSession failed, continuing with fallback:", e);
+        let userStr = localStorage.getItem(USER_KEY);
+        if (!userStr) {
+          const fallback: User = {
+            id: 'offline-' + Math.random().toString(36).substr(2, 9),
+            onboarded: false,
+            standardsAccepted: false
+          };
+          localStorage.setItem(USER_KEY, JSON.stringify(fallback));
+          notifyUpdate();
+          return fallback;
+        }
+        return JSON.parse(userStr);
+      } finally {
+        api.flushOutbox();
+      }
+    })();
+
+    return initPromise;
   },
 
   acceptStandards: async (): Promise<User> => {

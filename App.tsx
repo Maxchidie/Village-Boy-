@@ -16,29 +16,24 @@ const App: React.FC = () => {
   });
   const [isReady, setIsReady] = useState(false);
 
-  const boot = useCallback(async () => {
-    try {
-      // Race condition protection: ensure the splash screen clears within 2.5s
-      const u = await Promise.race([
-        api.initSession(),
-        new Promise<User>((_, reject) => 
-          setTimeout(() => reject(new Error("init timeout")), 2500)
-        ),
-      ]);
-      setUser(u);
-    } catch (err) {
-      console.warn("Boot continuing with local/fallback session identity:", err);
-      const local = localStorage.getItem('v_boy_user');
-      if (local) setUser(JSON.parse(local));
-      else {
-        setUser({ id: 'local-fallback', onboarded: false, standardsAccepted: false });
-      }
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
-
   useEffect(() => {
+    let mounted = true;
+
+    const boot = async () => {
+      try {
+        // IMPORTANT: never wait forever
+        await Promise.race([
+          api.initSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("init timeout")), 2500)),
+        ]);
+      } catch (e) {
+        console.warn("Boot continuing without API:", e);
+        // fail-open: allow app to load even if API is down
+      } finally {
+        if (mounted) setIsReady(true);
+      }
+    };
+
     boot();
 
     const handleUpdate = () => {
@@ -47,10 +42,11 @@ const App: React.FC = () => {
     };
     window.addEventListener('vb-user-updated', handleUpdate);
     
-    return () => {
+    return () => { 
+      mounted = false; 
       window.removeEventListener('vb-user-updated', handleUpdate);
     };
-  }, [boot]);
+  }, []);
 
   if (!isReady) {
     return (

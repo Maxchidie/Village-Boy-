@@ -1,8 +1,20 @@
-
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 
 const Landing: React.FC = () => {
+  const navigate = useNavigate();
+
+  const onGetStarted = () => {
+    // Navigate immediately so UI never stalls
+    navigate("/onboarding");
+
+    // Kick off session init in background (non-blocking)
+    api.initSession?.().catch((e: any) => {
+      console.warn("initSession failed (non-blocking):", e);
+    });
+  };
+
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <section className="text-center space-y-6 pt-8">
@@ -21,9 +33,12 @@ const Landing: React.FC = () => {
           Choose your preferred leaders at every level. Non-partisan. Private by default. Built for low data.
         </p>
         <div className="flex flex-col gap-3 pt-4">
-          <Link to="/onboarding" className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-green-200 dark:shadow-green-900/20 active:scale-[0.98] transition-all">
+          <button 
+            onClick={onGetStarted} 
+            className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-green-200 dark:shadow-green-900/20 active:scale-[0.98] transition-all"
+          >
             Get Started
-          </Link>
+          </button>
           <button className="text-slate-500 dark:text-slate-400 font-medium py-2">Learn More</button>
         </div>
       </section>
